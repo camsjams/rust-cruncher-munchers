@@ -1,7 +1,7 @@
 # rust-cruncher-munchers
 A basic Rust tribute of MECC's Munchers learning game
 
-# [![Game Demo](img/demo.gif)]
+# ![Game Demo](img/demo.gif)
 
 ## Description
 Using Bevy, a game engine for Rust engineers, I developed a Super Munchers clone with some of the basic features and utilized 3d models to slightly modernize the appearance of the typical Munchers style. See an [online archive version of Super Munchers here](https://archive.org/details/msdos_Super_Munchers_-_The_Challenge_Continues..._1991).
