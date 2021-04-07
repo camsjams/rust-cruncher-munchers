@@ -37,7 +37,7 @@ struct Game {
     score_streak: i32,
 }
 
-#[derive(Clone, Eq, PartialEq, Debug)]
+#[derive(Clone, Eq, PartialEq, Debug, Hash)]
 enum GameState {
     Crunching,
     GameOver,
@@ -97,7 +97,8 @@ fn setup_cameras(mut commands: Commands) {
     camera.orthographic_projection.scale = 4.8;
     camera.transform =
         Transform::from_xyz(2.7, 3.0, 0.0).looking_at(Vec3::new(3.0, 2.0, 0.0), Vec3::Y);
-    commands.spawn(camera).spawn(UiCameraBundle::default());
+    commands.spawn_bundle(camera);
+    commands.spawn_bundle(UiCameraBundle::default());
 }
 
 fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut game: ResMut<Game>) {
@@ -106,7 +107,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut game: ResMu
     game.cruncher.row = BOARD_ROWS / 2;
     game.cruncher.col = BOARD_COLS / 2;
 
-    commands.spawn(LightBundle {
+    commands.spawn_bundle(LightBundle {
         transform: Transform::from_xyz(4.0, 5.0, 4.0),
         ..Default::default()
     });
@@ -122,7 +123,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut game: ResMu
                         .unwrap_or(&"frog")
                         .to_string();
                     commands
-                        .spawn((
+                        .spawn_bundle((
                             Transform::from_xyz(row as f32, 0.0, col as f32),
                             GlobalTransform::identity(),
                         ))
@@ -131,7 +132,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut game: ResMu
                         });
 
                     commands
-                        .spawn(TextBundle {
+                        .spawn_bundle(TextBundle {
                             text: Text::with_section(
                                 format!("{}", term),
                                 TextStyle {
@@ -155,7 +156,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut game: ResMu
                             },
                             ..Default::default()
                         })
-                        .with(TermText { row, col });
+                        .insert(TermText { row, col });
 
                     Cell {
                         term: term.to_string(),
@@ -166,23 +167,25 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut game: ResMu
         .collect();
 
     // spawn the cruncher character
-    game.cruncher.entity = commands
-        .spawn((
-            Transform {
-                translation: Vec3::new(game.cruncher.row as f32, 0.0, game.cruncher.col as f32),
-                rotation: Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
-                ..Default::default()
-            },
-            GlobalTransform::identity(),
-        ))
-        .with_children(|cell| {
-            cell.spawn_scene(asset_server.load("models/cruncher.glb#Scene0"));
-        })
-        .current_entity();
+    game.cruncher.entity = Some(
+        commands
+            .spawn_bundle((
+                Transform {
+                    translation: Vec3::new(game.cruncher.row as f32, 0.0, game.cruncher.col as f32),
+                    rotation: Quat::from_rotation_y(-std::f32::consts::FRAC_PI_2),
+                    ..Default::default()
+                },
+                GlobalTransform::identity(),
+            ))
+            .with_children(|cell| {
+                cell.spawn_scene(asset_server.load("models/cruncher.glb#Scene0"));
+            })
+            .id(),
+    );
 
     // show the score and crunch meter
     commands
-        .spawn(TextBundle {
+        .spawn_bundle(TextBundle {
             text: Text {
                 sections: vec![
                     TextSection {
@@ -231,13 +234,13 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut game: ResMu
             },
             ..Default::default()
         })
-        .with(ScoreText);
+        .insert(ScoreText);
 
     // show the prompt
-    commands.spawn(TextBundle {
+    commands.spawn_bundle(TextBundle {
         text: Text {
             sections: vec![TextSection {
-                value: "Animals with fur".to_string(),
+                value: "Animals with fur - Press Spacebar to Munch!".to_string(),
                 style: TextStyle {
                     font: asset_server.load("fonts/FiraSans-Bold.ttf"),
                     font_size: 40.0,
@@ -250,7 +253,7 @@ fn setup(mut commands: Commands, asset_server: Res<AssetServer>, mut game: ResMu
             position_type: PositionType::Absolute,
             position: Rect {
                 top: Val::Percent(15.0),
-                left: Val::Percent(50.0),
+                left: Val::Percent(40.0),
                 ..Default::default()
             },
             ..Default::default()
@@ -315,7 +318,7 @@ fn move_player(
 
             if game.score_streak >= REQUIRED_CRUNCHES as i32 {
                 game.person.entity = None;
-                state.set_next(GameState::GameWin).unwrap();
+                state.set(GameState::GameWin).unwrap();
             }
 
             game.board[col][row].term = "".to_string();
@@ -338,9 +341,9 @@ fn move_player(
     // detect capture by astronaut person - Game Over
     if let Some(entity) = game.person.entity {
         if game.cruncher.row == game.person.row && game.cruncher.col == game.person.col {
-            commands.despawn_recursive(entity);
+            commands.entity(entity).despawn_recursive();
             game.person.entity = None;
-            state.set_next(GameState::GameOver).unwrap();
+            state.set(GameState::GameOver).unwrap();
         }
     }
 }
@@ -360,7 +363,7 @@ fn crunch_meter_system(game: Res<Game>, mut query: Query<&mut Text, With<ScoreTe
 // remove all entities that are not a camera
 fn teardown(mut commands: Commands, entities: Query<Entity, Without<Camera>>) {
     for entity in entities.iter() {
-        commands.despawn_recursive(entity);
+        commands.entity(entity).despawn_recursive();
     }
 }
 
@@ -425,18 +428,20 @@ fn spawn_or_move_person(
 
     game.person.row = rand::thread_rng().gen_range(0..BOARD_ROWS);
     game.person.col = 0;
-    game.person.entity = commands
-        .spawn((
-            Transform {
-                translation: Vec3::new(game.person.row as f32, 0.0, game.person.col as f32),
-                ..Default::default()
-            },
-            GlobalTransform::identity(),
-        ))
-        .with_children(|cell| {
-            cell.spawn_scene(game.person.handle.clone());
-        })
-        .current_entity();
+    game.person.entity = Some(
+        commands
+            .spawn_bundle((
+                Transform {
+                    translation: Vec3::new(game.person.row as f32, 0.0, game.person.col as f32),
+                    ..Default::default()
+                },
+                GlobalTransform::identity(),
+            ))
+            .with_children(|cell| {
+                cell.spawn_scene(game.person.handle.clone());
+            })
+            .id(),
+    );
 }
 
 // display the number of crunches before losing
@@ -447,7 +452,7 @@ fn display_final_score(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     commands
-        .spawn(NodeBundle {
+        .spawn_bundle(NodeBundle {
             style: Style {
                 margin: Rect::all(Val::Auto),
                 justify_content: JustifyContent::Center,
@@ -458,7 +463,7 @@ fn display_final_score(
             ..Default::default()
         })
         .with_children(|parent| {
-            parent.spawn(TextBundle {
+            parent.spawn_bundle(TextBundle {
                 text: Text {
                     sections: vec![
                         TextSection {
@@ -493,7 +498,7 @@ fn display_winning_score(
     mut materials: ResMut<Assets<ColorMaterial>>,
 ) {
     commands
-        .spawn(NodeBundle {
+        .spawn_bundle(NodeBundle {
             style: Style {
                 margin: Rect::all(Val::Auto),
                 justify_content: JustifyContent::Center,
@@ -504,7 +509,7 @@ fn display_winning_score(
             ..Default::default()
         })
         .with_children(|parent| {
-            parent.spawn(TextBundle {
+            parent.spawn_bundle(TextBundle {
                 text: Text {
                     sections: vec![
                         TextSection {
@@ -534,7 +539,7 @@ fn display_winning_score(
 // restart the game when pressing spacebar
 fn game_over_keyboard(mut state: ResMut<State<GameState>>, keyboard_input: Res<Input<KeyCode>>) {
     if keyboard_input.just_pressed(KeyCode::Return) {
-        state.set_next(GameState::Crunching).unwrap();
+        state.set(GameState::Crunching).unwrap();
     }
 }
 
