@@ -1,5 +1,5 @@
 # rust-cruncher-munchers
-A basic Rust tribute of MECC's Munchers learning game
+A basic Rust tribute of MECC's Munchers learning game - [see video here](https://www.youtube.com/watch?v=oee3Z69sE-8)
 
 # ![Game Demo](img/demo.gif)
 
